@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -113,4 +114,29 @@ func fDownload(path, url string, basicAuth bool) error {
 	fWrite(path, string(body))
 
 	return nil
+}
+
+// Basic auth comparing sha256sum of password\
+func basicAuth(user, password string) bool {
+	// get sha256sum of password
+	h := sha256.New()
+	h.Write([]byte(password))
+	sha256sum := fmt.Sprintf("%x", h.Sum(nil))
+	if *masterBasicAuthUser == user && *masterBasicAuthPasswordHash == sha256sum {
+		return true
+	}
+	return false
+}
+
+// Basic auth handler comparing sha256sum of password passes through to HandlerFunc
+func basicAuthHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, password, ok := r.BasicAuth()
+		if !ok || !basicAuth(user, password) {
+			w.Header().Set("WWW-Authenticate", "Basic realm=Restricted")
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		handler(w, r)
+	}
 }
